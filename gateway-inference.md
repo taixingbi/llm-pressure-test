@@ -17,44 +17,15 @@ curl http://192.168.86.179:30080/v1/chat/completions \
 ### gateway-inference
 
 ```bash
-run_chat_load() {
-  label=$1
-  base_url=$2
-  json_payload=$3
-  shift 3
-  for p in "$@"; do
-    echo "=== $label concurrency $p ==="
-    seq 1 200 | xargs -I{} -P "$p" sh -c '
-      curl -s -o /dev/null -w "%{http_code}\n" "$0/v1/chat/completions" \
-        -H "Content-Type: application/json" \
-        -d "$1"
-    ' "$base_url" "$json_payload" | sort | uniq -c
-  done
-}
-
-# dev
-run_chat_load dev http://192.168.86.179:30180 \
-  '{"model":"Qwen/Qwen2.5-7B-Instruct","messages":[{"role":"user","content":"introduce new york city"}],"max_tokens":256}' \
-  20 40 60
-
-# prod small request
-run_chat_load "prod small" http://192.168.86.179:30380 \
-  '{"model":"Qwen/Qwen2.5-7B-Instruct","messages":[{"role":"user","content":"introduce new york city"}],"max_tokens":56}' \
-  20 40 60 80 100 120
-
-# prod large request
-run_chat_load "prod large" http://192.168.86.179:30380 \
-  '{"model":"Qwen/Qwen2.5-7B-Instruct","messages":[{"role":"user","content":"introduce new york city"}],"max_tokens":256}' \
-  20 40 60
-
-# prod mixed request (25% large, 75% small)
 SMALL='{"model":"Qwen/Qwen2.5-7B-Instruct","messages":[{"role":"user","content":"introduce new york city"}],"max_tokens":64}'
 LARGE='{"model":"Qwen/Qwen2.5-7B-Instruct","messages":[{"role":"user","content":"Write a detailed 8-section travel guide for New York City including history, neighborhoods, transportation, food, attractions, itinerary, budget tips, and safety advice."}],"max_tokens":512}'
 BASE=http://192.168.86.179:30380
+TOTAL=200
 
-for p in 40 60 80; do
-  echo "=== mixed random concurrency $p ==="
-  seq 1 200 | xargs -I{} -P "$p" bash -c '
+for p in 40 60; do
+  tmp=$(mktemp)
+
+  seq 1 "$TOTAL" | xargs -I{} -P "$p" bash -c '
     r=$((RANDOM % 4))
     if [ "$r" -eq 0 ]; then
       TYPE=large
@@ -63,10 +34,44 @@ for p in 40 60 80; do
       TYPE=small
       DATA='"'"$SMALL"'"'
     fi
-    code=$(curl -s -o /dev/null -w "%{http_code}" "'"$BASE"'/v1/chat/completions" \
+
+    curl -s -o /dev/null \
+      -w "$TYPE %{http_code} %{time_connect} %{time_starttransfer} %{time_total}\n" \
+      "'"$BASE"'/v1/chat/completions" \
       -H "Content-Type: application/json" \
-      -d "$DATA")
-    echo "$TYPE $code"
-  ' | sort | uniq -c
+      -d "$DATA"
+  ' > "$tmp"
+
+  awk -v backend="$BASE" -v concurrency="$p" -v total="$TOTAL" '
+    {
+      type=$1
+      code=$2
+      connect[NR]=$3
+      ttfb[NR]=$4
+      e2e[NR]=$5
+      total_e2e += $5
+      count[type]++
+      if (code >= 200 && code < 300) success++
+      else errors++
+    }
+    function p99(arr, n,    i, j, t, idx) {
+      for (i=1;i<=n;i++) sorted[i]=arr[i]
+      for (i=1;i<=n;i++)
+        for (j=i+1;j<=n;j++)
+          if (sorted[i] > sorted[j]) {
+            t=sorted[i]; sorted[i]=sorted[j]; sorted[j]=t
+          }
+      idx=int(n*0.99)
+      if (idx < 1) idx=1
+      if (idx > n) idx=n
+      return sorted[idx]
+    }
+    END {
+      printf "backend=%s type=mixed concurrency=%s total=%d small=%d large=%d success=%d errors=%d total_e2e=%.6fs avg_e2e=%.6fs p99_connect=%.6fs p99_ttfb=%.6fs p99_e2e=%.6fs\n", \
+        backend, concurrency, total, count["small"]+0, count["large"]+0, success+0, errors+0, total_e2e, total_e2e/NR, p99(connect, NR), p99(ttfb, NR), p99(e2e, NR)
+    }
+  ' "$tmp"
+
+  rm -f "$tmp"
 done
 ```
