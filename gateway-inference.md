@@ -1,9 +1,20 @@
 # layer-gpu-pressure-test
 
 ## reference
+###
+```bash
+curl http://192.168.86.179:30080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Qwen/Qwen2.5-7B-Instruct",
+    "messages": [
+      {"role": "user", "content": "introduce new york city"}
+    ],
+    "max_tokens": 256
+  }'
+```
 
-### k3s
-
+```### k3s
 ```bash
 BASE_URL=http://192.168.86.179:30080
 CHAT_JSON='{"model":"Qwen/Qwen2.5-7B-Instruct","messages":[{"role":"user","content":"introduce new york city"}],"max_tokens":256}'
