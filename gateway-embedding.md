@@ -1,7 +1,7 @@
 ## gateway-embedding
 
 ```bash
-curl -sS -o /tmp/embed_resp.json \
+curl -sS \
   -w '\nconnect=%{time_connect}s\nttfb=%{time_starttransfer}s\ne2e=%{time_total}s\n' \
   -X POST http://192.168.86.179:30181/v1/embeddings \
   -H "X-Request-Id: request_id_1" \
