@@ -10,7 +10,7 @@ curl http://192.168.86.179:30080/v1/chat/completions \
     "messages": [
       {"role": "user", "content": "introduce new york city"}
     ],
-    "max_tokens": 256
+    "max_tokens": 50
   }'
 ```
 
