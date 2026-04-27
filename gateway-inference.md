@@ -1,7 +1,7 @@
 # layer-gpu-pressure-test
 
 ## reference
-###
+### smoke test
 ```bash
 curl http://192.168.86.179:30080/v1/chat/completions \
   -H "Content-Type: application/json" \
@@ -12,21 +12,6 @@ curl http://192.168.86.179:30080/v1/chat/completions \
     ],
     "max_tokens": 256
   }'
-```
-
-```### k3s
-```bash
-BASE_URL=http://192.168.86.179:30080
-CHAT_JSON='{"model":"Qwen/Qwen2.5-7B-Instruct","messages":[{"role":"user","content":"introduce new york city"}],"max_tokens":256}'
-
-for p in 60 80 100 120; do
-  echo "=== concurrency $p ==="
-  seq 1 200 | xargs -I{} -P "$p" sh -c '
-    curl -s -o /dev/null -w "%{http_code}\n" "$0/v1/chat/completions" \
-      -H "Content-Type: application/json" \
-      -d "$1"
-  ' "$BASE_URL" "$CHAT_JSON" | sort | uniq -c
-done
 ```
 
 ### gateway-inference
