@@ -4,9 +4,6 @@
 curl -sS \
   -w '\nconnect=%{time_connect}s\nttfb=%{time_starttransfer}s\ne2e=%{time_total}s\n' \
   -X POST http://192.168.86.179:30181/v1/embeddings \
-  -H "X-Request-Id: request_id_1" \
-  -H "X-Trace-Id: trace_id_1" \
-  -H "X-Session-Id: session_id_1" \
   -H "Content-Type: application/json" \
   -d '{"model":"BAAI/bge-m3","input":"hello world"}'
 ```
