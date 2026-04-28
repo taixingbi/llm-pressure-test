@@ -19,7 +19,7 @@ curl http://192.168.86.179:30080/v1/chat/completions \
 ```bash
 SMALL='{"model":"Qwen/Qwen2.5-7B-Instruct","messages":[{"role":"user","content":"introduce new york city"}],"max_tokens":64}'
 LARGE='{"model":"Qwen/Qwen2.5-7B-Instruct","messages":[{"role":"user","content":"Write a detailed 8-section travel guide for New York City including history, neighborhoods, transportation, food, attractions, itinerary, budget tips, and safety advice."}],"max_tokens":512}'
-BASE=http://192.168.86.179:30380
+BASE=http://192.168.86.179:30180
 TOTAL=200
 
 for p in 40 60; do
