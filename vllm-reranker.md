@@ -68,7 +68,7 @@ jq -n \
     top_n: 2
   }' > "$payload"
 
-for CONCURRENCY in 1 5 10 20 40 60; do
+for CONCURRENCY in 2 5 10 20 40 60; do
   for BACKEND in "${BACKENDS[@]}"; do
     tmp=$(mktemp)
 
