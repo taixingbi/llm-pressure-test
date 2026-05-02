@@ -19,52 +19,15 @@ curl -sS http://192.168.86.179:30182/v1/rerank \
 Short query + two short documents per request keeps per-seq token cost low so high concurrency stresses vLLM `--max-num-seqs` (and the gateway fan-out), not long-context throughput.
 
 ```bash
-percentile_99() {
-  sort -n | awk '
-    { a[NR] = $1 }
-    END {
-      if (NR == 0) { print "NA"; exit }
-      idx = int(NR * 0.99)
-      if (idx < 1) idx = 1
-      if (idx > NR) idx = NR
-      print a[idx]
-    }'
-}
+- http://192.168.86.179:30182 is the gateway (same /v1/rerank JSON as direct).
+- Bump CONCURRENCY until you hit queueing or errors; compare with vLLM --max-num-seqs.
+- Gateway adds proxy/routing overhead; include trace headers only on the gateway path below.
+backend=http://192.168.86.173:8002 type=direct text_chars=79 approx_tokens=19 total=500 success=500 errors=0 total_e2e=71.311712s avg_e2e=0.142623s p99_connect=1.022341s p99_ttfb=1.111249s p99_e2e=1.111287s
+backend=http://192.168.86.176:8002 type=direct text_chars=79 approx_tokens=19 total=500 success=500 errors=0 total_e2e=84.730925s avg_e2e=0.169462s p99_connect=1.101569s p99_ttfb=1.136427s p99_e2e=1.137096s
+backend=http://192.168.86.179:30182 type=gateway text_chars=79 approx_tokens=19 total=500 success=500 errors=0 total_e2e=99.676760s avg_e2e=0.199354s p99_connect=0.162973s p99_ttfb=0.316638s p99_e2e=0.316701s
+h@taixing-macmini ~ % clear
 
-BACKENDS=(
-  "http://192.168.86.173:8002"
-  "http://192.168.86.176:8002"
-  "http://192.168.86.179:30182"
-)
-
-GATEWAY_URL="http://192.168.86.179:30182"
-MODEL="BAAI/bge-reranker-v2-m3"
-TOTAL_REQUESTS=500
-CONCURRENCY=80
-
-PAYLOAD=$(mktemp)
-jq -n \
-  --arg model "$MODEL" \
-  --arg query "What is Paris?" \
-  '{
-    model: $model,
-    query: $query,
-    documents: [
-      "Paris is the capital of France.",
-      "Berlin is the capital of Germany."
-    ],
-    top_n: 2
-  }' >"$PAYLOAD"
-
-text_chars=$(jq -r '.query + (.documents | join(""))' "$PAYLOAD" | wc -c | tr -d ' ')
-approx_tokens=$(( text_chars / 4 ))
-
-echo "NOTE:"
-echo "- 192.168.86.173:8002 and 192.168.86.176:8002 are direct rerank backends."
-echo "- $GATEWAY_URL is the gateway (same /v1/rerank JSON as direct)."
-echo "- Bump CONCURRENCY until you hit queueing or errors; compare with vLLM --max-num-seqs."
-echo "- Gateway adds proxy/routing overhead; include trace headers only on the gateway path below."
-
+h@taixing-macmini ~ % >....                                                                                                                                                                                                         
 for ENDPOINT in "${BACKENDS[@]}"; do
   tmpfile=$(mktemp)
 
@@ -117,4 +80,17 @@ for ENDPOINT in "${BACKENDS[@]}"; do
 done
 
 rm -f "$PAYLOAD"
+zsh: command not found: #
+[1] 23420
+zsh: command not found: #
+[1]  + exit 127   # 计算 chars
+zsh: command not found: tokens
+NOTE:
+- direct backends: 173 / 176
+- gateway: http://192.168.86.179:30182
+- chars=8001 tokens~2000
+- CONCURRENCY=80 TOTAL=500
+backend=http://192.168.86.173:8002 type=direct text_chars=8001 approx_tokens=2000 total=500 success=500 errors=0 total_e2e=941.887320s avg_e2e=1.883775s p99_connect=1.013120s p99_ttfb=2.925260s p99_e2e=2.925451s
+backend=http://192.168.86.176:8002 type=direct text_chars=8001 approx_tokens=2000 total=500 success=500 errors=0 total_e2e=933.164636s avg_e2e=1.866329s p99_connect=0.141272s p99_ttfb=2.071264s p99_e2e=2.071351s
+backend=http://192.168.86.179:30182 type=gateway text_chars=8001 approx_tokens=2000 total=500 success=500 errors=0 total_e2e=479.404292s avg_e2e=0.958809s p99_connect=0.199727s p99_ttfb=1.140478s p99_e2e=1.143421s
 ```
