@@ -47,7 +47,7 @@ BACKENDS=(
 )
 
 MODEL="BAAI/bge-reranker-v2-m3"
-INPUT_CHARS=8000
+INPUT_CHARS=2000
 TOTAL=500
 
 DOC=$(python3 - <<'PY'
