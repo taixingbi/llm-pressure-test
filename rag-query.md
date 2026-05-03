@@ -40,7 +40,7 @@ TOTAL_REQUESTS=500
 
 echo "Benchmark start total=$TOTAL_REQUESTS"
 
-for CONCURRENCY in 2 10 20 40 60; do
+for CONCURRENCY in 1 2; do
   echo "CONCURRENCY=$CONCURRENCY"
   tmpfile=$(mktemp)
 
