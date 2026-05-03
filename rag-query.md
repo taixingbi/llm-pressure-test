@@ -36,7 +36,7 @@ percentile_99() {
 }
 
 RAG_URL="http://192.168.86.179:30183"
-TOTAL_REQUESTS=500
+TOTAL_REQUESTS=50
 
 echo "Benchmark start total=$TOTAL_REQUESTS"
 
