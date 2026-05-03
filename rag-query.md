@@ -36,11 +36,11 @@ percentile_99() {
 }
 
 RAG_URL="http://192.168.86.179:30183"
-TOTAL_REQUESTS=50
+TOTAL_REQUESTS=300
 
 echo "Benchmark start total=$TOTAL_REQUESTS"
 
-for CONCURRENCY in 1 2; do
+for CONCURRENCY in 1 2 5 10 40; do
   echo "CONCURRENCY=$CONCURRENCY"
   tmpfile=$(mktemp)
 
