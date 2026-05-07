@@ -35,7 +35,7 @@ percentile_99() {
 ORCH_URL="http://192.168.86.179:30184"
 echo "Benchmark start (requests per level = 2 * concurrency)"
 
-for CONCURRENCY in 1 5 10; do
+for CONCURRENCY in 1 5 15; do
   TOTAL_REQUESTS=$((CONCURRENCY * 2))
   echo "CONCURRENCY=$CONCURRENCY TOTAL_REQUESTS=$TOTAL_REQUESTS"
   tmpfile=$(mktemp)
