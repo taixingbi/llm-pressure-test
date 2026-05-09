@@ -12,7 +12,8 @@ curl -sS -o /dev/null \
     "messages": [
       {"role": "user", "content": "introduce new york city"}
     ],
-    "max_tokens": 512
+    "max_tokens": 512,
+    "stream": true
   }'
 ```
 
