@@ -3,7 +3,9 @@
 ## reference
 ### smoke test
 ```bash
-curl http://192.168.86.179:30080/v1/chat/completions \
+curl -sS -o /dev/null \
+  -w '\nlookup=%{time_namelookup}s connect=%{time_connect}s ttfb=%{time_starttransfer}s total=%{time_total}s\n' \
+  http://192.168.86.179:30080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "Qwen/Qwen2.5-7B-Instruct",
