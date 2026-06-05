@@ -177,7 +177,7 @@ percentile_99() {
     { a[NR] = $1 }
     END {
       if (NR == 0) { print "NA"; exit }
-      idx = int(NR * 0.99)
+      idx = int(NR * 0.99 + 0.999999)
       if (idx < 1) idx = 1
       if (idx > NR) idx = NR
       print a[idx]
@@ -190,52 +190,50 @@ BACKENDS=(
 )
 
 MODEL="Qwen/Qwen2.5-7B-Instruct"
-TOTAL_REQUESTS=500
+TOTAL_REQUESTS=100
 INPUT_CHARS=300
-MAX_TOKENS=64
+MAX_TOKENS=16
 
 INPUT_FILE=/tmp/vllm_infer_input.txt
 PAYLOAD=/tmp/vllm_infer_small.json
 
-SOURCE_URL="https://en.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext=1&titles=New_York_City&format=json"
+yes "Introduce New York City." | head -c "$INPUT_CHARS" > "$INPUT_FILE"
 
-curl -fsSL "$SOURCE_URL" | jq -r '.query.pages[].extract' | head -c "$INPUT_CHARS" >"$INPUT_FILE"
-
-raw_chars=$(wc -c <"$INPUT_FILE" | tr -d ' ')
+raw_chars=$(wc -c < "$INPUT_FILE" | tr -d ' ')
 approx_tokens=$(( raw_chars / 4 ))
 
 jq -n \
   --arg model "$MODEL" \
+  --argjson max_tokens "$MAX_TOKENS" \
   --rawfile content "$INPUT_FILE" \
   '{
     model: $model,
     messages: [{role: "user", content: $content}],
-    max_tokens: 64,
+    max_tokens: $max_tokens,
     temperature: 0
-  }' >"$PAYLOAD"
+  }' > "$PAYLOAD"
 
-for CONCURRENCY in 2 10 20 40 60; do
-  echo "CONCURRENCY=$CONCURRENCY"
+for CONCURRENCY in 10 30 60; do
+  echo "================ CONCURRENCY=$CONCURRENCY ================"
 
   for ENDPOINT in "${BACKENDS[@]}"; do
     tmpfile=$(mktemp)
 
     seq 1 "$TOTAL_REQUESTS" | xargs -P "$CONCURRENCY" -I{} bash -c '
-      curl -sS -o /dev/null \
+      curl -sS --max-time 30 -o /dev/null \
         -w "%{http_code} %{time_starttransfer} %{time_total}\n" \
         -X POST "$1/v1/chat/completions" \
         -H "Content-Type: application/json" \
         --data-binary @"$2"
-    ' _ "$ENDPOINT" "$PAYLOAD" >"$tmpfile"
+    ' _ "$ENDPOINT" "$PAYLOAD" > "$tmpfile" || true
 
     success=$(awk '$1 == "200" { c++ } END { print c + 0 }' "$tmpfile")
-    total=$(wc -l <"$tmpfile" | tr -d " ")
+    total=$(wc -l < "$tmpfile" | tr -d ' ')
     errors=$((total - success))
-
     p99_ttfb=$(awk '$1 == "200" { print $2 }' "$tmpfile" | percentile_99)
     p99_e2e=$(awk '$1 == "200" { print $3 }' "$tmpfile" | percentile_99)
 
-    echo "backend=$ENDPOINT input_chars=$raw_chars approx_tokens=$approx_tokens max_tokens=$MAX_TOKENS concurrency=$CONCURRENCY total=$total success=$success errors=$errors p99_ttfb=${p99_ttfb}s p99_e2e=${p99_e2e}s"
+    echo "backend=$ENDPOINT concurrency=$CONCURRENCY total=$total success=$success errors=$errors p99_ttfb=${p99_ttfb}s p99_e2e=${p99_e2e}s"
 
     rm -f "$tmpfile"
   done
@@ -244,6 +242,20 @@ for CONCURRENCY in 2 10 20 40 60; do
 done
 
 rm -f "$INPUT_FILE" "$PAYLOAD"
+```
+
+```
+================ CONCURRENCY=10 ================
+backend=http://192.168.86.173:30080 concurrency=10 total=100 success=100 errors=0 p99_ttfb=3.064914s p99_e2e=3.065070s
+backend=http://192.168.86.176:30080 concurrency=10 total=100 success=100 errors=0 p99_ttfb=3.330336s p99_e2e=3.330478s
+
+================ CONCURRENCY=30 ================
+backend=http://192.168.86.173:30080 concurrency=30 total=100 success=100 errors=0 p99_ttfb=6.874035s p99_e2e=6.874290s
+backend=http://192.168.86.176:30080 concurrency=30 total=100 success=100 errors=0 p99_ttfb=5.877331s p99_e2e=5.877490s
+
+================ CONCURRENCY=60 ================
+backend=http://192.168.86.173:30080 concurrency=60 total=100 success=100 errors=0 p99_ttfb=11.063462s p99_e2e=11.063626s
+backend=http://192.168.86.176:30080 concurrency=60 total=100 success=100 errors=0 p99_ttfb=12.873376s p99_e2e=12.873613s
 ```
 
 ## test concurrent with large prompts -> max-num-seqs
