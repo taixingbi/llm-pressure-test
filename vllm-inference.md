@@ -148,7 +148,25 @@ rm -f "$INPUT_FILE" "$PAYLOAD" "$RAW"
 ```
 
 ```
-=============== SIZE=500 ================= backend=http://192.168.86.173:30080 input_chars=500 approx_tokens=125 total=100 success=100 errors=0 p99_ttfb=2.811349s p99_e2e=2.811451s backend=http://192.168.86.176:30080 input_chars=500 approx_tokens=125 total=100 success=100 errors=0 p99_ttfb=2.205883s p99_e2e=2.205938s ================ SIZE=2000 ================= backend=http://192.168.86.173:30080 input_chars=2000 approx_tokens=500 total=100 success=100 errors=0 p99_ttfb=2.197484s p99_e2e=2.197591s backend=http://192.168.86.176:30080 input_chars=2000 approx_tokens=500 total=100 success=100 errors=0 p99_ttfb=2.476644s p99_e2e=2.476751s ================ SIZE=4000 ================= backend=http://192.168.86.173:30080 input_chars=4000 approx_tokens=1000 total=100 success=100 errors=0 p99_ttfb=2.997351s p99_e2e=2.997445s backend=http://192.168.86.176:30080 input_chars=4000 approx_tokens=1000 total=100 success=100 errors=0 p99_ttfb=2.726635s p99_e2e=2.726738s ================ SIZE=6000 ================= backend=http://192.168.86.173:30080 input_chars=6000 approx_tokens=1500 total=100 success=100 errors=0 p99_ttfb=2.477090s p99_e2e=2.477190s backend=http://192.168.86.176:30080 input_chars=6000 approx_tokens=1500 total=100 success=100 errors=0 p99_ttfb=2.605486s p99_e2e=2.605539s ================ SIZE=8000 ================= backend=http://192.168.86.173:30080 input_chars=8000 approx_tokens=2000 total=100 success=100 errors=0 p99_ttfb=2.757352s p99_e2e=2.757448s backend=http://192.168.86.176:30080 input_chars=8000 approx_tokens=2000 total=100 success=100 errors=0 p99_ttfb=3.123095s p99_e2e=3.123218s
+================ SIZE=500 =================
+backend=http://192.168.86.173:30080 input_chars=500 approx_tokens=125 total=100 success=100 errors=0 p99_ttfb=2.164795s p99_e2e=2.164878s
+backend=http://192.168.86.176:30080 input_chars=500 approx_tokens=125 total=100 success=100 errors=0 p99_ttfb=3.131688s p99_e2e=3.131796s
+
+================ SIZE=2000 =================
+backend=http://192.168.86.173:30080 input_chars=2000 approx_tokens=500 total=100 success=100 errors=0 p99_ttfb=3.470500s p99_e2e=3.470599s
+backend=http://192.168.86.176:30080 input_chars=2000 approx_tokens=500 total=100 success=100 errors=0 p99_ttfb=3.020592s p99_e2e=3.020702s
+
+================ SIZE=4000 =================
+backend=http://192.168.86.173:30080 input_chars=4000 approx_tokens=1000 total=100 success=100 errors=0 p99_ttfb=2.837704s p99_e2e=2.837750s
+backend=http://192.168.86.176:30080 input_chars=4000 approx_tokens=1000 total=100 success=100 errors=0 p99_ttfb=2.606517s p99_e2e=2.606605s
+
+================ SIZE=6000 =================
+backend=http://192.168.86.173:30080 input_chars=6000 approx_tokens=1500 total=100 success=100 errors=0 p99_ttfb=2.779074s p99_e2e=2.779178s
+backend=http://192.168.86.176:30080 input_chars=6000 approx_tokens=1500 total=100 success=100 errors=0 p99_ttfb=2.665286s p99_e2e=2.665384s
+
+================ SIZE=8000 =================
+backend=http://192.168.86.173:30080 input_chars=8000 approx_tokens=2000 total=100 success=100 errors=0 p99_ttfb=2.627962s p99_e2e=2.628062s
+backend=http://192.168.86.176:30080 input_chars=8000 approx_tokens=2000 total=100 success=100 errors=0 p99_ttfb=2.698558s p99_e2e=2.698716s
 ```
 
 ## test concurrent with small prompts -> max-num-seqs
