@@ -213,7 +213,7 @@ jq -n \
     temperature: 0
   }' > "$PAYLOAD"
 
-for CONCURRENCY in 10 30 60; do
+for CONCURRENCY in 10 20 30 40; do
   echo "================ CONCURRENCY=$CONCURRENCY ================"
 
   for ENDPOINT in "${BACKENDS[@]}"; do
