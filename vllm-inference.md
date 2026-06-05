@@ -8,7 +8,7 @@
   --max-num-seqs 32 \
   --gpu-memory-utilization 0.90
 
-## Single-request smoke
+## smoke test
 
 ```bash
 curl -sS http://192.168.86.173:30080/health | jq .
