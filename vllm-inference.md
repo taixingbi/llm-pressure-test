@@ -70,10 +70,6 @@ e2e=0.176304s
 ## test prompt size -> max-model-len
 
 ```bash
-cat >/tmp/bench_infer_prompt.sh <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-
 percentile_99() {
   sort -n | awk '
     { a[NR] = $1 }
@@ -93,19 +89,17 @@ BACKENDS=(
 
 SIZES=(500 2000 4000 6000 8000)
 
-SOURCE_URL="https://en.wikipedia.org/wiki/New_York_City"
+SOURCE_URL="https://en.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext=1&titles=New_York_City&format=json"
 INPUT_FILE=/tmp/vllm_infer_input.txt
 PAYLOAD=/tmp/vllm_infer.json
+RAW=/tmp/wiki_raw.txt
 
 TOTAL=100
 CONCURRENCY=20
 MODEL="Qwen/Qwen2.5-7B-Instruct"
 
 echo "Fetching source..."
-RAW=/tmp/wiki_raw.txt
-curl -fsSL "$SOURCE_URL" \
-  | lynx -dump -stdin \
-  | iconv -f utf-8 -t utf-8 -c > "$RAW"
+curl -fsSL "$SOURCE_URL" | jq -r '.query.pages[].extract' > "$RAW"
 
 for SIZE in "${SIZES[@]}"; do
   echo ""
@@ -116,22 +110,15 @@ for SIZE in "${SIZES[@]}"; do
   raw_chars=$(wc -c < "$INPUT_FILE" | tr -d ' ')
   tokens=$(( raw_chars / 4 ))
 
-  python3 - <<PY
-import json
-
-with open("$INPUT_FILE", "r", encoding="utf-8", errors="ignore") as f:
-    text = f.read()
-
-payload = {
-    "model": "$MODEL",
-    "messages": [{"role": "user", "content": text}],
-    "max_tokens": 8,
-    "temperature": 0,
-}
-
-with open("$PAYLOAD", "w", encoding="utf-8") as out:
-    json.dump(payload, out)
-PY
+  jq -n \
+    --arg model "$MODEL" \
+    --rawfile content "$INPUT_FILE" \
+    '{
+      model: $model,
+      messages: [{role: "user", content: $content}],
+      max_tokens: 8,
+      temperature: 0
+    }' > "$PAYLOAD"
 
   for ENDPOINT in "${BACKENDS[@]}"; do
     tmpfile=$(mktemp)
@@ -158,10 +145,6 @@ PY
 done
 
 rm -f "$INPUT_FILE" "$PAYLOAD" "$RAW"
-echo "Done."
-EOF
-
-bash /tmp/bench_infer_prompt.sh
 ```
 
 ## test concurrent with small prompts -> max-num-seqs
@@ -192,27 +175,22 @@ MAX_TOKENS=64
 INPUT_FILE=/tmp/vllm_infer_input.txt
 PAYLOAD=/tmp/vllm_infer_small.json
 
-SOURCE_URL="https://en.wikipedia.org/wiki/New_York_City"
+SOURCE_URL="https://en.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext=1&titles=New_York_City&format=json"
 
-curl -fsSL "$SOURCE_URL" | lynx -dump -stdin | iconv -f utf-8 -t utf-8 -c | head -c "$INPUT_CHARS" >"$INPUT_FILE"
+curl -fsSL "$SOURCE_URL" | jq -r '.query.pages[].extract' | head -c "$INPUT_CHARS" >"$INPUT_FILE"
 
 raw_chars=$(wc -c <"$INPUT_FILE" | tr -d ' ')
 approx_tokens=$(( raw_chars / 4 ))
 
-python3 - <<'PY'
-import json
-
-with open("/tmp/vllm_infer_input.txt", "r", encoding="utf-8", errors="ignore") as f:
-    payload = {
-        "model": "Qwen/Qwen2.5-7B-Instruct",
-        "messages": [{"role": "user", "content": f.read()}],
-        "max_tokens": 64,
-        "temperature": 0,
-    }
-
-with open("/tmp/vllm_infer_small.json", "w", encoding="utf-8") as out:
-    json.dump(payload, out)
-PY
+jq -n \
+  --arg model "$MODEL" \
+  --rawfile content "$INPUT_FILE" \
+  '{
+    model: $model,
+    messages: [{role: "user", content: $content}],
+    max_tokens: 64,
+    temperature: 0
+  }' >"$PAYLOAD"
 
 for CONCURRENCY in 2 10 20 40 60; do
   echo "CONCURRENCY=$CONCURRENCY"
@@ -274,36 +252,26 @@ MAX_TOKENS=512
 INPUT_FILE=/tmp/vllm_infer_input.txt
 PAYLOAD=/tmp/vllm_infer_large.json
 
-SOURCE_URL="https://en.wikipedia.org/wiki/New_York_City"
+SOURCE_URL="https://en.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext=1&titles=New_York_City&format=json"
+SUFFIX=$'\n\nWrite a detailed 8-section travel guide for New York City including history, neighborhoods, transportation, food, attractions, itinerary, budget tips, and safety advice.'
 
-curl -fsSL "$SOURCE_URL" | lynx -dump -stdin | iconv -f utf-8 -t utf-8 -c | head -c "$INPUT_CHARS" >"$INPUT_FILE"
+curl -fsSL "$SOURCE_URL" | jq -r '.query.pages[].extract' | head -c "$INPUT_CHARS" >"$INPUT_FILE"
 
 raw_chars=$(wc -c <"$INPUT_FILE" | tr -d ' ')
 approx_tokens=$(( raw_chars / 4 ))
 
 echo "input_chars=$raw_chars approx_tokens=$approx_tokens max_tokens=$MAX_TOKENS"
 
-python3 - <<'PY'
-import json
-
-with open("/tmp/vllm_infer_input.txt", "r", encoding="utf-8", errors="ignore") as f:
-    payload = {
-        "model": "Qwen/Qwen2.5-7B-Instruct",
-        "messages": [{
-            "role": "user",
-            "content": (
-                f.read()
-                + "\n\nWrite a detailed 8-section travel guide for New York City including "
-                "history, neighborhoods, transportation, food, attractions, itinerary, budget tips, and safety advice."
-            ),
-        }],
-        "max_tokens": 512,
-        "temperature": 0,
-    }
-
-with open("/tmp/vllm_infer_large.json", "w", encoding="utf-8") as out:
-    json.dump(payload, out)
-PY
+jq -n \
+  --arg model "$MODEL" \
+  --rawfile content "$INPUT_FILE" \
+  --arg suffix "$SUFFIX" \
+  '{
+    model: $model,
+    messages: [{role: "user", content: ($content + $suffix)}],
+    max_tokens: 512,
+    temperature: 0
+  }' >"$PAYLOAD"
 
 for CONCURRENCY in 2 10 20 40 60; do
   echo "CONCURRENCY=$CONCURRENCY"
