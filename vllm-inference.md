@@ -190,9 +190,9 @@ BACKENDS=(
 )
 
 MODEL="Qwen/Qwen2.5-7B-Instruct"
-TOTAL_REQUESTS=30
+TOTAL_REQUESTS=20
 INPUT_CHARS=300
-MAX_TOKENS=256
+MAX_TOKENS=128
 
 INPUT_FILE=/tmp/vllm_infer_input.txt
 PAYLOAD=/tmp/vllm_infer_small.json
