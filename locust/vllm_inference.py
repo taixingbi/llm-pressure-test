@@ -1,10 +1,10 @@
 import settings
-from inference_workload import InferenceWorkloadUser
+from workload_inference import WorkloadInferenceUser
 
 
-class VllmInferenceNode1(InferenceWorkloadUser):
+class VllmInferenceNode1(WorkloadInferenceUser):
     host = settings.VLLM_INFER_NODE1
 
 
-class VllmInferenceNode2(InferenceWorkloadUser):
+class VllmInferenceNode2(WorkloadInferenceUser):
     host = settings.VLLM_INFER_NODE2

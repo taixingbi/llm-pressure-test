@@ -19,18 +19,23 @@ Run all commands from the `locust/` directory so `settings` and `helpers` import
 |-----|----------|
 | [README-gateway.md](README-gateway.md) | Gateway inference, embedding, reranker |
 | [README-direct-vllm.md](README-direct-vllm.md) | Direct gpu-node inference, embedding, reranker |
-| This file | Setup, RAG, orchestrator, shared config |
+| [README-rag.md](README-rag.md) | RAG query (`/v1/rag/query`) |
+| This file | Setup, orchestrator, shared config |
 
 ## Layout
 
 | File | User class(es) | Target |
 |------|----------------|--------|
-| `inference_workload.py` | `InferenceWorkloadUser` (abstract) | shared chat workload |
+| `workload_inference.py` | `WorkloadInferenceUser` (abstract) | shared chat workload |
+| `workload_embedding.py` | `WorkloadEmbeddingUser` (abstract) | shared embedding workload |
+| `workload_reranker.py` | `WorkloadRerankerUser` (abstract) | shared reranker workload |
+| `workload_rag.py` | `WorkloadRagUser` (abstract) | shared RAG query workload |
 | `gateway_inference.py` | `GatewayInferenceUser` | `GATEWAY_INFER` |
-| `vllm_inference.py` | `VllmInferenceNode1`, `VllmInferenceNode2` | direct GPU nodes |
-| `vllm_embedding.py` | `VllmEmbeddingNode1`, `VllmEmbeddingNode2` | `/v1/embeddings` |
-| `vllm_reranker.py` | `VllmRerankerNode1`, `VllmRerankerNode2` | `/v1/rerank` |
-| `gateway_embedding.py` | `GatewayEmbeddingUser` | `/v1/embeddings` |
+| `gateway_embedding.py` | `GatewayEmbeddingUser` | `GATEWAY_EMBED` |
+| `gateway_reranker.py` | `GatewayRerankerUser` | `GATEWAY_RERANK` |
+| `vllm_inference.py` | `VllmInferenceNode1`, `VllmInferenceNode2` | direct GPU inference |
+| `vllm_embedding.py` | `VllmEmbeddingNode1`, `VllmEmbeddingNode2` | direct GPU embedding |
+| `vllm_reranker.py` | `VllmRerankerNode1`, `VllmRerankerNode2` | direct GPU reranker |
 | `gateway_reranker.py` | `GatewayRerankerUser` | `/v1/rerank` |
 | `rag_query.py` | `RagQueryUser` | `/v1/rag/query` |
 | `orchestrator.py` | `OrchestratorUser` | `/orchestrator/stream-answer` |
@@ -46,6 +51,8 @@ Gateway: [README-gateway.md](README-gateway.md) → `../smoke-test/gateway-*.md`
 
 Direct nodes: [README-direct-vllm.md](README-direct-vllm.md) → `../smoke-test/vllm-*.md`
 
+RAG: [README-rag.md](README-rag.md) → `../smoke-test/rag-query.md`
+
 ## Run (web UI)
 
 ### Gateway
@@ -56,10 +63,13 @@ Inference, embedding, reranker: [README-gateway.md](README-gateway.md).
 
 Inference, embedding, reranker on gpu-node-1 / gpu-node-2: [README-direct-vllm.md](README-direct-vllm.md).
 
-### Other services
+### RAG query (`:30183`)
+
+[README-rag.md](README-rag.md)
+
+### Orchestrator
 
 ```bash
-locust -f rag_query.py
 locust -f orchestrator.py
 ```
 
@@ -71,8 +81,9 @@ Gateway: [README-gateway.md](README-gateway.md).
 
 Direct vLLM: [README-direct-vllm.md](README-direct-vllm.md).
 
+RAG: [README-rag.md](README-rag.md).
+
 ```bash
-locust -f rag_query.py --headless -u 20 -r 10 -t 2m
 locust -f orchestrator.py --headless -u 10 -r 5 -t 5m
 ```
 
@@ -112,7 +123,7 @@ kill -9 <PID>
 
 Or use another UI port:
 
-```bash
+locust -f vllm_inference.py VllmInferenceNode1 --web-port 8090 --host http://192.168.86.173:30080 --users 4 --spawn-rate 1
 locust -f gateway_inference.py --web-port 8090 --users 1 --spawn-rate 1
 ```
 
@@ -126,7 +137,7 @@ Direct-node troubleshooting: [README-direct-vllm.md](README-direct-vllm.md#troub
 
 **Direct vLLM** — [README-direct-vllm.md](README-direct-vllm.md).
 
-**RAG query** — `what is taixing visa` with unique `request_id` / `session_id` per request.
+**RAG query** — [README-rag.md](README-rag.md).
 
 **Orchestrator** — streaming `stream-answer`; response body is fully read before marking success.
 

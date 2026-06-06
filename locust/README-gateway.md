@@ -14,7 +14,7 @@ Smoke tests (run before Locust): `../smoke-test/gateway-inference.md`, `gateway-
 | Embedding | `gateway_embedding.py` | `GatewayEmbeddingUser` | 30181 |
 | Reranker | `gateway_reranker.py` | `GatewayRerankerUser` | 30182 |
 
-Inference shares `inference_workload.py` (`InferenceWorkloadUser`).
+Shared workloads: `workload_inference.py`, `workload_embedding.py`, `workload_reranker.py`.
 
 ## Inference workload
 
@@ -22,7 +22,7 @@ Tuned for current vLLM chat config behind the gateway:
 
 ```
 --max-model-len 2048
---max-num-seqs 1
+--max-num-seqs 8
 ```
 
 Gateway concurrency (`layer-gateway-inference` ConfigMap):
@@ -34,24 +34,43 @@ Gateway concurrency (`layer-gateway-inference` ConfigMap):
 
 Per-backend `soft_limit` is 12 (overload penalty above 12; hard cap at 16).
 
-Task mix (`inference_workload.py`):
+Task mix (`workload_inference.py`):
 
-| Task | max_tokens | Weight | Timeout |
-|------|------------|--------|---------|
-| small | 64 | 6 | 60s |
-| medium | 128 | 2 | 90s |
-| stream | 256 | 1 | 120s |
+| Task | max_tokens | Weight | Share | Timeout |
+|------|------------|--------|-------|---------|
+| small | 64 | 6 | 60% | 60s |
+| medium | 128 | 2 | 20% | 90s |
+| stream | 256 | 1 | 10% | 120s |
+| long | 512 | 1 | 10% | 180s |
 
-Start with **1 user** on the gateway. Ramp to **16** (one backend saturated), then **32** (global cap). Drop back if failures or ~30s latency.
+Streaming tasks fully drain SSE and fail if no chunks arrive.
+
+### Test matrix (inference gateway)
+
+| Users | Meaning |
+|-------|---------|
+| 4 | Under capacity (baseline) |
+| 8 | One backend at `max-num-seqs` |
+| 16 | Both backends at capacity |
+| 24 | Queue pressure |
+| 32 | Gateway global cap / stress |
+
+**Pass condition:** `fail = 0`, p95 &lt; 10s, p99 &lt; 20s.
+
+Start at **4 users**, ramp **8 → 16 → 24 → 32**. Drop back if failures or ~30s latency.
 
 `wait_time` is `1–2s` between tasks.
 
 ## Embedding workload
 
-| Task | Input | Weight |
-|------|-------|--------|
-| small | 300 chars | 3 |
-| large | 8000 chars | 1 |
+Task mix (`workload_embedding.py`):
+
+| Task | Input | Weight | Timeout |
+|------|-------|--------|---------|
+| small | 300 chars | 3 | 30s |
+| large | 8000 chars | 1 | 120s |
+
+Responses must include non-empty `data` (embedding vectors).
 
 ## Reranker workload
 
@@ -69,16 +88,12 @@ Pass `--host` explicitly so the web UI does not send traffic to the wrong target
 ```bash
 locust -f gateway_inference.py \
   --host http://192.168.86.179:30180 \
-  --users 1 --spawn-rate 1
+  --users 4 --spawn-rate 1
 ```
 
-Ramp after stable 1-user run (gateway hard_limit 16/backend, 32 global):
+Ramp after each level is stable:
 
 ```bash
-locust -f gateway_inference.py \
-  --host http://192.168.86.179:30180 \
-  --users 8 --spawn-rate 1
-
 locust -f gateway_inference.py \
   --host http://192.168.86.179:30180 \
   --users 16 --spawn-rate 1
@@ -93,7 +108,7 @@ locust -f gateway_inference.py \
 ```bash
 locust -f gateway_embedding.py \
   --host http://192.168.86.179:30181 \
-  --users 16 --spawn-rate 1
+  --users 32 --spawn-rate 1
 ```
 
 ### Reranker (`:30182`)
@@ -101,13 +116,13 @@ locust -f gateway_embedding.py \
 ```bash
 locust -f gateway_reranker.py \
   --host http://192.168.86.179:30182 \
-  --users 16 --spawn-rate 1
+  --users 32 --spawn-rate 1
 ```
 
 In the Locust UI at http://localhost:8089:
 
 - leave **Host** empty to use the user-class / CLI host
-- inference: start at **1 user**; embedding/reranker: **16 users** at spawn rate 1
+- inference: start at **4 users**, ramp to **8 / 16 / 24 / 32**; embedding/reranker: **16 users** at spawn rate 1
 
 ## Run (headless)
 
@@ -115,7 +130,7 @@ In the Locust UI at http://localhost:8089:
 # inference
 locust -f gateway_inference.py \
   --host http://192.168.86.179:30180 \
-  --headless --users 1 --spawn-rate 1 -t 2m
+  --headless --users 8 --spawn-rate 1 -t 2m
 
 # embedding
 locust -f gateway_embedding.py \
@@ -133,7 +148,7 @@ Export CSV:
 ```bash
 locust -f gateway_inference.py \
   --host http://192.168.86.179:30180 \
-  --headless --users 1 --spawn-rate 1 -t 2m \
+  --headless --users 8 --spawn-rate 1 -t 2m \
   --csv=results/gateway-infer
 
 locust -f gateway_reranker.py --headless --users 16 --spawn-rate 1 -t 2m \
@@ -156,9 +171,9 @@ export RERANK_MODEL=BAAI/bge-reranker-v2-m3
 
 ### All requests fail at ~30s with ~56-byte body
 
-Typical with gateway inference when too many users queue behind `--max-num-seqs 1` on the backend.
+Typical with gateway inference when too many users queue behind backend `max-num-seqs` or gateway `hard_limit`.
 
-1. Drop to `--users 1` for inference.
+1. Drop to `--users 4` for inference, then ramp slowly.
 2. Check **Failures** tab for `status=502/504: ...`.
 3. Confirm smoke test passes: `../smoke-test/gateway-inference.md`.
 4. Compare with direct node: [README-direct-vllm.md](README-direct-vllm.md). Fast direct + slow gateway = gateway queue/timeout.
@@ -169,4 +184,4 @@ Typical with gateway inference when too many users queue behind `--max-num-seqs 
 
 ### `No tasks defined on GatewayInferenceUser`
 
-Tasks must live on an `HttpUser` subclass (`InferenceWorkloadUser`), not a plain mixin.
+Tasks must live on an `HttpUser` subclass (`WorkloadInferenceUser`, `WorkloadEmbeddingUser`, `WorkloadRerankerUser`), not a plain mixin.

@@ -1,4 +1,5 @@
 import itertools
+import random
 import uuid
 
 SMALL_PROMPT_CHARS = 300
@@ -6,12 +7,53 @@ LARGE_PROMPT_CHARS = 8000
 SMALL_MAX_TOKENS = 64
 MEDIUM_MAX_TOKENS = 128
 STREAM_MAX_TOKENS = 256
-# Reserve 512-token workloads until max-num-seqs >= 4 and max-model-len is raised.
 HEAVY_MAX_TOKENS = 512
 PROMPT_PROBE_CHARS = (200, 500, 1000, 1500)
 RERANK_LONG_DOC_CHARS = 512
 
+SMALL_PROMPTS = [
+    "introduce new york city",
+    "introduce boston",
+    "introduce seattle",
+    "introduce chicago",
+    "introduce san francisco",
+]
+
+CITIES = [
+    "New York City",
+    "Boston",
+    "Seattle",
+    "Chicago",
+    "San Francisco",
+]
+
 _id_counter = itertools.count(1)
+
+
+def random_small_prompt() -> str:
+    return random.choice(SMALL_PROMPTS)
+
+
+def random_medium_prompt() -> str:
+    city = random.choice(CITIES)
+    return (
+        f"Write a concise travel guide for {city} with sections for "
+        "transportation, food, attractions, and safety."
+    )
+
+
+def random_stream_prompt() -> str:
+    city = random.choice(CITIES)
+    return f"Write a short {city} travel guide."
+
+
+def random_long_prompt() -> str:
+    city = random.choice(CITIES)
+    return (
+        f"Write a detailed but concise {city} travel guide. "
+        "Include transportation, food, attractions, neighborhoods, "
+        "budget tips, safety, and a 2-day itinerary."
+    )
 
 
 def next_id(prefix: str) -> str:
@@ -71,22 +113,43 @@ def rerank_payload(
     }
 
 
+RAG_QUESTIONS = [
+    "what is taixing visa",
+    "What is the current US visa status of Taixing?",
+]
+
+
+def random_rag_question() -> str:
+    return random.choice(RAG_QUESTIONS)
+
+
+def rag_headers() -> dict[str, str]:
+    headers = trace_headers()
+    headers.update(
+        {
+            "X-User-Id": "taixing",
+            "X-User-Roles": "hr",
+            "X-User-Groups": "engineering",
+            "X-User-Teams": "rag-platform",
+        }
+    )
+    return headers
+
+
 def rag_payload(
     *,
     question: str,
     collection_base: str,
-    request_id: str,
-    session_id: str,
     k: int = 5,
-    k_max: int = 40,
+    k_max: int = 50,
+    stream: bool = False,
 ) -> dict:
     return {
         "question": question,
         "collection_base": collection_base,
-        "request_id": request_id,
-        "session_id": session_id,
         "k": k,
         "k_max": k_max,
+        "stream": stream,
     }
 
 
@@ -98,10 +161,39 @@ def orchestrator_payload(*, question: str, request_id: str, session_id: str) -> 
     }
 
 
-def drain_stream(response) -> None:
-    for _ in response.iter_content(chunk_size=4096):
-        pass
+def drain_stream(response) -> int:
+    chunks = 0
 
+    for line in response.iter_lines():
+        if not line:
+            continue
+
+        chunks += 1
+
+        if b"[DONE]" in line:
+            break
+
+    return chunks
+
+
+def drain_rag_stream(response) -> tuple[int, bool, bool]:
+    """Return (non_empty_lines, saw_error, saw_done) after full RAG SSE drain."""
+    events = 0
+    saw_error = False
+    saw_done = False
+
+    for line in response.iter_lines(decode_unicode=False):
+        if not line:
+            continue
+
+        events += 1
+        if line.startswith(b"event: error"):
+            saw_error = True
+        if line.startswith(b"event: done"):
+            saw_done = True
+            break
+
+    return events, saw_error, saw_done
 
 def unique_rag_ids() -> tuple[str, str]:
     suffix = uuid.uuid4().hex[:8]

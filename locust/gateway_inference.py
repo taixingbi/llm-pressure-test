@@ -1,6 +1,6 @@
 import settings
-from inference_workload import InferenceWorkloadUser
+from workload_inference import WorkloadInferenceUser
 
 
-class GatewayInferenceUser(InferenceWorkloadUser):
+class GatewayInferenceUser(WorkloadInferenceUser):
     host = settings.GATEWAY_INFER
