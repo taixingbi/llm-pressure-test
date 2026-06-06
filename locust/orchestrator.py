@@ -21,7 +21,7 @@ class OrchestratorUser(HttpUser):
             "/orchestrator/stream-answer",
             json=body,
             headers=helpers.trace_headers(),
-            name="/orchestrator/stream-answer",
+            name=helpers.ORCH_STREAM_FULL_NAME,
             stream=True,
             catch_response=True,
             timeout=300,
@@ -29,4 +29,8 @@ class OrchestratorUser(HttpUser):
             if response.status_code != 200:
                 response.failure(f"status={response.status_code}")
             else:
-                helpers.drain_stream(response)
+                helpers.finish_chat_stream(
+                    self,
+                    response,
+                    ttft_name=helpers.ORCH_STREAM_TTFT_NAME,
+                )

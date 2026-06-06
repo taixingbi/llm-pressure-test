@@ -34,14 +34,15 @@ Task mix (`workload_rag.py`):
 | Task | Mode | Weight | Locust name | Timeout |
 |------|------|--------|-------------|---------|
 | `rag_query_json` | JSON (`stream: false`) | 1 | `/v1/rag/query [json]` | 180s |
-| `rag_query_stream` | SSE (`stream: true`) | 1 | `/v1/rag/query [stream full]` | 180s |
+| `rag_query_stream` | SSE (`stream: true`) | 1 | `/v1/rag/query [stream full]` + `[stream ttft]` | 180s |
 
 - Questions rotate via `helpers.random_rag_question()` (`helpers.RAG_QUESTIONS`)
 - Correlation ids in **headers only** (`X-Request-Id`, `X-Session-Id`, `X-Trace-Id`) — not in JSON body
 - Access-control headers: `X-User-Id`, `X-User-Roles`, `X-User-Groups`, `X-User-Teams`
 - JSON tasks fail if `answer` is missing
-- Stream tasks drain until `event: done` (after `answer_delta` / `answer_end` / citations / follow-ups) and fail on `event: error`, missing `event: done`, or missing answer tokens
-- Locust records `stream=True` response time at **headers only**; workload adds body-drain duration so `[stream full]` ≈ JSON latency (~2.5–3.5s)
+- One stream request reports **two** Locust stats: `[stream ttft]` (first `answer_delta`) and `[stream full]` (through `event: done`)
+- Stream fails on `event: error`, missing `event: done`, missing answer tokens, or truncated body
+- Locust records `stream=True` response time at **headers only**; workload adds body-drain duration so `[stream full]` ≈ JSON latency (~2.5–3.5s); `[stream ttft]` ≈ embed + retrieve + first token (~300–800ms)
 - Debug first SSE lines: `RAG_SSE_DEBUG=1 locust -f rag_query.py ...`
 
 `wait_time` is `0.5–1s` between tasks.
@@ -74,11 +75,7 @@ Ramp after each level is stable:
 ```bash
 locust -f rag_query.py \
   --host http://192.168.86.179:30183 \
-  --users 4 --spawn-rate 1
-
-locust -f rag_query.py \
-  --host http://192.168.86.179:30183 \
-  --users 8 --spawn-rate 1
+  --users 16 --spawn-rate 1
 ```
 
 In the Locust UI at http://localhost:8089:

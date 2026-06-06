@@ -36,14 +36,14 @@ Per-backend `soft_limit` is 12 (overload penalty above 12; hard cap at 16).
 
 Task mix (`workload_inference.py`):
 
-| Task | max_tokens | Weight | Share | Timeout |
-|------|------------|--------|-------|---------|
-| small | 64 | 6 | 60% | 60s |
-| medium | 128 | 2 | 20% | 90s |
-| stream | 256 | 1 | 10% | 120s |
-| long | 512 | 1 | 10% | 180s |
+| Task | max_tokens | Weight | Share | Locust name | Timeout |
+|------|------------|--------|-------|-------------|---------|
+| small | 64 | 6 | 60% | `/v1/chat/completions [small 64]` | 60s |
+| medium | 128 | 2 | 20% | `/v1/chat/completions [medium 128]` | 90s |
+| stream | 256 | 1 | 10% | `[stream 256 ttft]` + `[stream 256 full]` | 120s |
+| long | 512 | 1 | 10% | `/v1/chat/completions [long 512]` | 180s |
 
-Streaming tasks fully drain SSE and fail if no chunks arrive.
+Stream: TTFT = first `delta.content` chunk (skips gateway `conversation` + empty role chunk); full = through `data: [DONE]`. Locust header-only timing is corrected for full drain.
 
 ### Test matrix (inference gateway)
 

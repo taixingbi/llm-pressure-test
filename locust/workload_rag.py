@@ -1,5 +1,3 @@
-import time
-
 from locust import HttpUser, between, task
 
 import helpers
@@ -41,32 +39,26 @@ class WorkloadRagUser(HttpUser):
                 return
 
             if stream:
-                drain_start = time.perf_counter()
-                try:
-                    (
-                        lines,
-                        saw_error,
-                        saw_done,
-                        answer_deltas,
-                        saw_answer_end,
-                    ) = helpers.drain_rag_stream(response)
-                except Exception as exc:
-                    helpers.add_response_time_ms(
-                        response, (time.perf_counter() - drain_start) * 1000
-                    )
-                    response.failure(exc)
-                    return
-
-                helpers.add_response_time_ms(
-                    response, (time.perf_counter() - drain_start) * 1000
+                header_ms = response.request_meta["response_time"]
+                drain = helpers.drain_rag_stream(response)
+                helpers.add_response_time_ms(response, drain.drain_ms)
+                helpers.fire_stream_ttft(
+                    self,
+                    name=helpers.RAG_STREAM_TTFT_NAME,
+                    header_ms=header_ms,
+                    ttft_drain_ms=drain.ttft_drain_ms,
+                    has_token=drain.answer_deltas > 0,
                 )
-                if saw_error:
+
+                if drain.error:
+                    response.failure(drain.error)
+                elif drain.saw_error:
                     response.failure("stream error event")
-                elif not saw_done:
+                elif not drain.saw_done:
                     response.failure("stream missing done event")
-                elif answer_deltas == 0 and not saw_answer_end:
+                elif drain.answer_deltas == 0 and not drain.saw_answer_end:
                     response.failure("stream missing answer")
-                elif lines == 0:
+                elif drain.lines == 0:
                     response.failure("stream returned no events")
                 return
 
@@ -103,7 +95,7 @@ class WorkloadRagUser(HttpUser):
             stream=True,
         )
         self._post_rag(
-            name="/v1/rag/query [stream full]",
+            name=helpers.RAG_STREAM_FULL_NAME,
             body=body,
             stream=True,
             accept="text/event-stream",

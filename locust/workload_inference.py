@@ -16,7 +16,15 @@ class WorkloadInferenceUser(HttpUser):
     network_timeout = 200.0
     wait_time = between(1.0, 2.0)
 
-    def _post_chat(self, *, name: str, body: dict, timeout: float, stream: bool = False) -> None:
+    def _post_chat(
+        self,
+        *,
+        name: str,
+        body: dict,
+        timeout: float,
+        stream: bool = False,
+        ttft_name: str | None = None,
+    ) -> None:
         try:
             with self.client.post(
                 "/v1/chat/completions",
@@ -33,9 +41,11 @@ class WorkloadInferenceUser(HttpUser):
                     )
                     return
                 if stream:
-                    chunks = helpers.drain_stream(response)
-                    if chunks == 0:
-                        response.failure("stream returned no chunks")
+                    helpers.finish_chat_stream(
+                        self,
+                        response,
+                        ttft_name=ttft_name or helpers.CHAT_STREAM_TTFT_NAME,
+                    )
         except Exception as exc:
             self.environment.events.request.fire(
                 request_type="POST",
@@ -43,7 +53,7 @@ class WorkloadInferenceUser(HttpUser):
                 response_time=0,
                 response_length=0,
                 exception=exc,
-                context={},
+                context=self.context(),
             )
 
     @task(6)
@@ -81,10 +91,11 @@ class WorkloadInferenceUser(HttpUser):
             stream=True,
         )
         self._post_chat(
-            name="/v1/chat/completions [stream 256]",
+            name=helpers.CHAT_STREAM_FULL_NAME,
             body=body,
             timeout=120,
             stream=True,
+            ttft_name=helpers.CHAT_STREAM_TTFT_NAME,
         )
 
     @task(1)

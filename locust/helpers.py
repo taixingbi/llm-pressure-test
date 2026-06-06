@@ -1,7 +1,10 @@
 import itertools
+import json
 import os
 import random
+import time
 import uuid
+from dataclasses import dataclass
 
 RAG_SSE_DEBUG = os.getenv("RAG_SSE_DEBUG", "").lower() in ("1", "true", "yes")
 
@@ -139,6 +142,34 @@ def rag_headers() -> dict[str, str]:
     return headers
 
 
+MCP_GITHUB_QUESTIONS = [
+    "introduce this huntAi project",
+    "what is the huntAi architecture?",
+]
+
+
+def random_mcp_github_question() -> str:
+    return random.choice(MCP_GITHUB_QUESTIONS)
+
+
+def mcp_github_payload(
+    *,
+    question: str,
+    repo: str,
+    conversation_id: str | None = None,
+) -> dict:
+    arguments: dict[str, str] = {"repo": repo, "question": question}
+    if conversation_id:
+        arguments["conversation_id"] = conversation_id
+
+    return {
+        "jsonrpc": "2.0",
+        "id": next_id("mcp"),
+        "method": "tools/call",
+        "params": {"name": "github_search", "arguments": arguments},
+    }
+
+
 def rag_payload(
     *,
     question: str,
@@ -164,19 +195,145 @@ def orchestrator_payload(*, question: str, request_id: str, session_id: str) -> 
     }
 
 
+CHAT_STREAM_FULL_NAME = "/v1/chat/completions [stream 256 full]"
+CHAT_STREAM_TTFT_NAME = "/v1/chat/completions [stream 256 ttft]"
+ORCH_STREAM_FULL_NAME = "/orchestrator/stream-answer [stream full]"
+ORCH_STREAM_TTFT_NAME = "/orchestrator/stream-answer [stream ttft]"
+RAG_STREAM_FULL_NAME = "/v1/rag/query [stream full]"
+RAG_STREAM_TTFT_NAME = "/v1/rag/query [stream ttft]"
+MCP_STREAM_FULL_NAME = "/v1/mcp [stream full]"
+MCP_STREAM_TTFT_NAME = "/v1/mcp [stream ttft]"
+
+
+@dataclass
+class ChatStreamDrain:
+    chunks: int = 0
+    content_chunks: int = 0
+    saw_done: bool = False
+    ttft_drain_ms: float | None = None
+    drain_ms: float = 0.0
+    error: Exception | None = None
+
+
+def _sse_data_line_has_content(line: bytes) -> bool:
+    if not line.startswith(b"data: "):
+        return False
+
+    payload = line[6:].strip()
+    if not payload or payload == b"[DONE]":
+        return False
+
+    try:
+        data = json.loads(payload)
+    except json.JSONDecodeError:
+        return b'"content"' in payload and b'"content":""' not in payload
+
+    for choice in data.get("choices", []):
+        delta = choice.get("delta") or {}
+        if delta.get("content"):
+            return True
+
+    if data.get("text"):
+        return True
+
+    return False
+
+
+def drain_chat_stream(response) -> ChatStreamDrain:
+    """Drain OpenAI-style SSE until ``data: [DONE]`` (or connection error)."""
+    result = ChatStreamDrain()
+    drain_started = time.perf_counter()
+
+    try:
+        for line in response.iter_lines(decode_unicode=False):
+            if not line:
+                continue
+
+            result.chunks += 1
+            if _sse_data_line_has_content(line):
+                result.content_chunks += 1
+                if result.ttft_drain_ms is None:
+                    result.ttft_drain_ms = (time.perf_counter() - drain_started) * 1000
+
+            if b"[DONE]" in line:
+                result.saw_done = True
+                break
+    except Exception as exc:
+        result.error = exc
+    finally:
+        result.drain_ms = (time.perf_counter() - drain_started) * 1000
+
+    return result
+
+
 def drain_stream(response) -> int:
-    chunks = 0
+    return drain_chat_stream(response).chunks
 
-    for line in response.iter_lines():
-        if not line:
-            continue
 
-        chunks += 1
+def fire_stream_ttft(
+    user,
+    *,
+    name: str,
+    header_ms: float,
+    ttft_drain_ms: float | None,
+    has_token: bool,
+    request_type: str = "POST",
+) -> None:
+    from locust.exception import CatchResponseError
 
-        if b"[DONE]" in line:
-            break
+    if has_token and ttft_drain_ms is not None:
+        ttft_ms = header_ms + ttft_drain_ms
+        exception = None
+    else:
+        ttft_ms = 0
+        exception = CatchResponseError("missing first answer token")
 
-    return chunks
+    user.environment.events.request.fire(
+        request_type=request_type,
+        name=name,
+        response_time=ttft_ms,
+        response_length=0,
+        exception=exception,
+        context=user.context(),
+    )
+
+
+def finish_chat_stream(
+    user,
+    response,
+    *,
+    ttft_name: str,
+) -> None:
+    """Apply full-stream timing and report TTFT for chat/orchestrator SSE."""
+    header_ms = response.request_meta["response_time"]
+    drain = drain_chat_stream(response)
+    add_response_time_ms(response, drain.drain_ms)
+    fire_stream_ttft(
+        user,
+        name=ttft_name,
+        header_ms=header_ms,
+        ttft_drain_ms=drain.ttft_drain_ms,
+        has_token=drain.content_chunks > 0,
+    )
+
+    if drain.error:
+        response.failure(drain.error)
+    elif drain.content_chunks == 0:
+        response.failure("stream returned no content chunks")
+    elif drain.chunks == 0:
+        response.failure("stream returned no chunks")
+
+
+@dataclass
+class RagStreamDrain:
+    lines: int = 0
+    saw_error: bool = False
+    saw_done: bool = False
+    answer_deltas: int = 0
+    saw_answer_end: bool = False
+    ttft_drain_ms: float | None = None
+    drain_ms: float = 0.0
+    error: Exception | None = None
 
 
 def drain_rag_stream(
@@ -184,38 +341,39 @@ def drain_rag_stream(
     *,
     debug: bool = RAG_SSE_DEBUG,
     debug_max_lines: int = 20,
-) -> tuple[int, bool, bool, int, bool]:
-    """Drain RAG SSE until ``event: done``.
-
-    Returns (lines, saw_error, saw_done, answer_deltas, saw_answer_end).
-    """
-    lines = 0
+) -> RagStreamDrain:
+    """Drain RAG SSE until ``event: done`` (or connection error)."""
+    result = RagStreamDrain()
     debug_lines = 0
-    saw_error = False
-    saw_done = False
-    answer_deltas = 0
-    saw_answer_end = False
+    drain_started = time.perf_counter()
 
-    for line in response.iter_lines(decode_unicode=False):
-        if not line:
-            continue
+    try:
+        for line in response.iter_lines(decode_unicode=False):
+            if not line:
+                continue
 
-        lines += 1
-        if debug and debug_lines < debug_max_lines:
-            print("SSE:", line[:200])
-            debug_lines += 1
+            result.lines += 1
+            if debug and debug_lines < debug_max_lines:
+                print("SSE:", line[:200])
+                debug_lines += 1
 
-        if line.startswith(b"event: error"):
-            saw_error = True
-        elif line.startswith(b"event: answer_delta"):
-            answer_deltas += 1
-        elif line.startswith(b"event: answer_end"):
-            saw_answer_end = True
-        elif line.startswith(b"event: done"):
-            saw_done = True
-            break
+            if line.startswith(b"event: error"):
+                result.saw_error = True
+            elif line.startswith(b"event: answer_delta"):
+                result.answer_deltas += 1
+                if result.ttft_drain_ms is None:
+                    result.ttft_drain_ms = (time.perf_counter() - drain_started) * 1000
+            elif line.startswith(b"event: answer_end"):
+                result.saw_answer_end = True
+            elif line.startswith(b"event: done"):
+                result.saw_done = True
+                break
+    except Exception as exc:
+        result.error = exc
+    finally:
+        result.drain_ms = (time.perf_counter() - drain_started) * 1000
 
-    return lines, saw_error, saw_done, answer_deltas, saw_answer_end
+    return result
 
 
 def add_response_time_ms(response, extra_ms: float) -> None:

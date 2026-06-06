@@ -19,7 +19,8 @@ Run all commands from the `locust/` directory so `settings` and `helpers` import
 |-----|----------|
 | [README-gateway.md](README-gateway.md) | Gateway inference, embedding, reranker |
 | [README-direct-vllm.md](README-direct-vllm.md) | Direct gpu-node inference, embedding, reranker |
-| [README-rag.md](README-rag.md) | RAG query (`/v1/rag/query`) |
+| [README-rag-query.md](README-rag-query.md) | RAG query (`/v1/rag/query`) |
+| [README-mcp-github.md](README-mcp-github.md) | MCP GitHub search (`/v1/mcp`) |
 | This file | Setup, orchestrator, shared config |
 
 ## Layout
@@ -38,6 +39,8 @@ Run all commands from the `locust/` directory so `settings` and `helpers` import
 | `vllm_reranker.py` | `VllmRerankerNode1`, `VllmRerankerNode2` | direct GPU reranker |
 | `gateway_reranker.py` | `GatewayRerankerUser` | `/v1/rerank` |
 | `rag_query.py` | `RagQueryUser` | `/v1/rag/query` |
+| `workload_mcp.py` | `WorkloadMcpUser` (abstract) | shared MCP GitHub workload |
+| `mcp_github.py` | `McpGithubUser` | `/v1/mcp` |
 | `orchestrator.py` | `OrchestratorUser` | `/orchestrator/stream-answer` |
 
 Shared modules:
@@ -51,7 +54,9 @@ Gateway: [README-gateway.md](README-gateway.md) → `../smoke-test/gateway-*.md`
 
 Direct nodes: [README-direct-vllm.md](README-direct-vllm.md) → `../smoke-test/vllm-*.md`
 
-RAG: [README-rag.md](README-rag.md) → `../smoke-test/rag-query.md`
+RAG: [README-rag-query.md](README-rag-query.md) → `../smoke-test/rag-query.md`
+
+MCP GitHub: [README-mcp-github.md](README-mcp-github.md) → `../smoke-test/mcp-github.md`
 
 ## Run (web UI)
 
@@ -65,7 +70,11 @@ Inference, embedding, reranker on gpu-node-1 / gpu-node-2: [README-direct-vllm.m
 
 ### RAG query (`:30183`)
 
-[README-rag.md](README-rag.md)
+[README-rag-query.md](README-rag-query.md)
+
+### MCP GitHub (`:30191`)
+
+[README-mcp-github.md](README-mcp-github.md)
 
 ### Orchestrator
 
@@ -81,7 +90,9 @@ Gateway: [README-gateway.md](README-gateway.md).
 
 Direct vLLM: [README-direct-vllm.md](README-direct-vllm.md).
 
-RAG: [README-rag.md](README-rag.md).
+RAG: [README-rag-query.md](README-rag-query.md).
+
+MCP GitHub: [README-mcp-github.md](README-mcp-github.md).
 
 ```bash
 locust -f orchestrator.py --headless -u 10 -r 5 -t 5m
@@ -104,12 +115,14 @@ export GATEWAY_EMBED=http://192.168.86.179:30181
 export GATEWAY_RERANK=http://192.168.86.179:30182
 
 export RAG_URL=http://192.168.86.179:30183
+export MCP_URL=http://192.168.86.179:30191
 export ORCH_URL=http://192.168.86.179:30184
 
 export INFER_MODEL=Qwen/Qwen2.5-7B-Instruct
 export EMBED_MODEL=BAAI/bge-m3
 export RERANK_MODEL=BAAI/bge-reranker-v2-m3
 export RAG_COLLECTION=taixing_knowledge
+export MCP_GITHUB_REPO="https://github.com/taixingbi/layer-web-v1/tree/main/app/blog"
 ```
 
 ## Troubleshooting
@@ -137,12 +150,14 @@ Direct-node troubleshooting: [README-direct-vllm.md](README-direct-vllm.md#troub
 
 **Direct vLLM** — [README-direct-vllm.md](README-direct-vllm.md).
 
-**RAG query** — [README-rag.md](README-rag.md).
+**RAG query** — [README-rag-query.md](README-rag-query.md).
 
-**Orchestrator** — streaming `stream-answer`; response body is fully read before marking success.
+**MCP GitHub** — [README-mcp-github.md](README-mcp-github.md).
+
+**Orchestrator** — streaming `stream-answer`; reports `[stream ttft]` + `[stream full]` per request.
 
 ## Notes
 
 - Requests include `X-Request-Id`, `X-Trace-Id`, and `X-Session-Id` for traceability under load.
 - Non-200 responses are recorded as failures in Locust stats.
-- Streaming endpoints wait for the full body (or timeout) so latency reflects end-to-end completion.
+- Streaming endpoints drain the full body and report separate TTFT / full-completion stats (Locust `stream=True` header timing is corrected).
