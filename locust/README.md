@@ -17,14 +17,14 @@ Run all commands from the `locust/` directory so `settings` and `helpers` import
 
 | Doc | Coverage |
 |-----|----------|
+| [README-gateway.md](README-gateway.md) | Gateway inference, embedding, reranker |
 | [README-direct-vllm.md](README-direct-vllm.md) | Direct gpu-node inference, embedding, reranker |
-| This file | Gateway, RAG, orchestrator, shared config |
+| This file | Setup, RAG, orchestrator, shared config |
 
 ## Layout
 
 | File | User class(es) | Target |
 |------|----------------|--------|
-| `locustfile.py` | `GatewayInferenceUser` | gateway inference (default entry) |
 | `inference_workload.py` | `InferenceWorkloadUser` (abstract) | shared chat workload |
 | `gateway_inference.py` | `GatewayInferenceUser` | `GATEWAY_INFER` |
 | `vllm_inference.py` | `VllmInferenceNode1`, `VllmInferenceNode2` | direct GPU nodes |
@@ -40,41 +40,21 @@ Shared modules:
 - `settings.py` — host URLs and model names (env overrides)
 - `helpers.py` — payload builders, trace headers, stream drain
 
-## Smoke test before Locust (gateway)
+## Smoke test before Locust
 
-```bash
-curl -sS -o /dev/null \
-  -w 'status=%{http_code} ttfb=%{time_starttransfer}s e2e=%{time_total}s\n' \
-  -X POST http://192.168.86.179:30180/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "Qwen/Qwen2.5-7B-Instruct",
-    "messages": [{"role": "user", "content": "introduce new york city"}],
-    "max_tokens": 64,
-    "temperature": 0
-  }'
-```
+Gateway: [README-gateway.md](README-gateway.md) → `../smoke-test/gateway-*.md`
 
-Direct-node smoke tests: [README-direct-vllm.md](README-direct-vllm.md).
+Direct nodes: [README-direct-vllm.md](README-direct-vllm.md) → `../smoke-test/vllm-*.md`
 
 ## Run (web UI)
 
-### Gateway inference
+### Gateway
 
-```bash
-locust -f locustfile.py --users 1 --spawn-rate 1
-```
-
-Ramp only after 1 user is stable (0% failures, latency not stuck at ~30s):
-
-```bash
-locust -f locustfile.py --users 2 --spawn-rate 1
-locust -f locustfile.py --users 4 --spawn-rate 1
-```
+Inference, embedding, reranker: [README-gateway.md](README-gateway.md).
 
 ### Direct vLLM nodes
 
-Inference, embedding, and reranker on gpu-node-1 / gpu-node-2: see [README-direct-vllm.md](README-direct-vllm.md).
+Inference, embedding, reranker on gpu-node-1 / gpu-node-2: [README-direct-vllm.md](README-direct-vllm.md).
 
 ### Other services
 
@@ -87,25 +67,13 @@ Open http://localhost:8089 to adjust users/spawn rate interactively.
 
 ## Run (headless)
 
-Gateway inference:
+Gateway: [README-gateway.md](README-gateway.md).
 
-```bash
-locust -f locustfile.py --headless --users 1 --spawn-rate 1 -t 2m
-```
-
-Other services:
+Direct vLLM: [README-direct-vllm.md](README-direct-vllm.md).
 
 ```bash
 locust -f rag_query.py --headless -u 20 -r 10 -t 2m
 locust -f orchestrator.py --headless -u 10 -r 5 -t 5m
-```
-
-Direct vLLM headless runs: [README-direct-vllm.md](README-direct-vllm.md).
-
-Export CSV:
-
-```bash
-locust -f locustfile.py --headless -u 1 -r 1 -t 2m --csv=results/gateway-infer
 ```
 
 ## Configuration
@@ -145,28 +113,18 @@ kill -9 <PID>
 Or use another UI port:
 
 ```bash
-locust -f locustfile.py --web-port 8090 --users 1 --spawn-rate 1
+locust -f gateway_inference.py --web-port 8090 --users 1 --spawn-rate 1
 ```
 
-### All requests fail at ~30s with ~56-byte body
+Gateway troubleshooting: [README-gateway.md](README-gateway.md#troubleshooting).
 
-Typical with gateway + `--max-num-seqs 1` + too many users. Drop to `--users 1` and check the **Failures** tab for `status=502/504: ...`.
-
-Compare gateway vs direct node: [README-direct-vllm.md](README-direct-vllm.md#troubleshooting).
-
-### `No tasks defined on GatewayInferenceUser`
-
-Tasks must live on an `HttpUser` subclass. Use the current `InferenceWorkloadUser` base class pattern; do not put `@task` on a plain mixin.
+Direct-node troubleshooting: [README-direct-vllm.md](README-direct-vllm.md#troubleshooting).
 
 ## Scenarios per service
 
-**Gateway inference** — weighted mix: small 64 (6), medium 128 (2), stream 256 (1). See `locustfile.py`.
+**Gateway** — [README-gateway.md](README-gateway.md).
 
-**Direct vLLM inference / embedding / reranker** — see [README-direct-vllm.md](README-direct-vllm.md).
-
-**Gateway embedding** — small input (300 chars), large input (8000 chars).
-
-**Gateway reranker** — short docs (2 sentences), 512-char doc + short second doc.
+**Direct vLLM** — [README-direct-vllm.md](README-direct-vllm.md).
 
 **RAG query** — `what is taixing visa` with unique `request_id` / `session_id` per request.
 

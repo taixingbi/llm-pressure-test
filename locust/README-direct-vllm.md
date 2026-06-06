@@ -4,7 +4,7 @@ Load tests for inference, embedding, and reranker on gpu-node-1 / gpu-node-2. Se
 
 Parent curl benchmarks: `vllm-inference.md`, `vllm-embedding.md`, `vllm-reranker.md`.
 
-Smoke tests (run before Locust): `../smoke-test/vllm-inference.md`, `../smoke-test/vllm-embedding.md`, `../smoke-test/vllm-reranker.md`.
+Smoke tests (run before Locust): `../smoke-test/vllm-inference.md`, `vllm-embedding.md`, `vllm-reranker.md`. Gateway: [README-gateway.md](README-gateway.md).
 
 ## Locust files
 
@@ -77,12 +77,12 @@ locust -f vllm_inference.py VllmInferenceNode2 \
 # gpu-node-1
 locust -f vllm_embedding.py VllmEmbeddingNode1 \
   --host http://192.168.86.173:30081 \
-  --users 32 --spawn-rate 1
+  --users 16 --spawn-rate 1
 
 # gpu-node-2
 locust -f vllm_embedding.py VllmEmbeddingNode2 \
   --host http://192.168.86.176:30081 \
-  --users 32 --spawn-rate 1
+  --users 16 --spawn-rate 1
 ```
 
 ### Reranker (`:30082`)
