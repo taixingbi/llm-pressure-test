@@ -1,6 +1,9 @@
 import itertools
+import os
 import random
 import uuid
+
+RAG_SSE_DEBUG = os.getenv("RAG_SSE_DEBUG", "").lower() in ("1", "true", "yes")
 
 SMALL_PROMPT_CHARS = 300
 LARGE_PROMPT_CHARS = 8000
@@ -176,24 +179,48 @@ def drain_stream(response) -> int:
     return chunks
 
 
-def drain_rag_stream(response) -> tuple[int, bool, bool]:
-    """Return (non_empty_lines, saw_error, saw_done) after full RAG SSE drain."""
-    events = 0
+def drain_rag_stream(
+    response,
+    *,
+    debug: bool = RAG_SSE_DEBUG,
+    debug_max_lines: int = 20,
+) -> tuple[int, bool, bool, int, bool]:
+    """Drain RAG SSE until ``event: done``.
+
+    Returns (lines, saw_error, saw_done, answer_deltas, saw_answer_end).
+    """
+    lines = 0
+    debug_lines = 0
     saw_error = False
     saw_done = False
+    answer_deltas = 0
+    saw_answer_end = False
 
     for line in response.iter_lines(decode_unicode=False):
         if not line:
             continue
 
-        events += 1
+        lines += 1
+        if debug and debug_lines < debug_max_lines:
+            print("SSE:", line[:200])
+            debug_lines += 1
+
         if line.startswith(b"event: error"):
             saw_error = True
-        if line.startswith(b"event: done"):
+        elif line.startswith(b"event: answer_delta"):
+            answer_deltas += 1
+        elif line.startswith(b"event: answer_end"):
+            saw_answer_end = True
+        elif line.startswith(b"event: done"):
             saw_done = True
             break
 
-    return events, saw_error, saw_done
+    return lines, saw_error, saw_done, answer_deltas, saw_answer_end
+
+
+def add_response_time_ms(response, extra_ms: float) -> None:
+    """Locust records stream response_time at headers; add body-drain duration."""
+    response.request_meta["response_time"] += extra_ms
 
 def unique_rag_ids() -> tuple[str, str]:
     suffix = uuid.uuid4().hex[:8]

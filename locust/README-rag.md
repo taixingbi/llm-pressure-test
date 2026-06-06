@@ -39,7 +39,10 @@ Task mix (`workload_rag.py`):
 - Questions rotate via `helpers.random_rag_question()` (`helpers.RAG_QUESTIONS`)
 - Correlation ids in **headers only** (`X-Request-Id`, `X-Session-Id`, `X-Trace-Id`) — not in JSON body
 - Access-control headers: `X-User-Id`, `X-User-Roles`, `X-User-Groups`, `X-User-Teams`
-- JSON tasks fail if `answer` is missing; stream tasks fail on `event: error` or missing `event: done`
+- JSON tasks fail if `answer` is missing
+- Stream tasks drain until `event: done` (after `answer_delta` / `answer_end` / citations / follow-ups) and fail on `event: error`, missing `event: done`, or missing answer tokens
+- Locust records `stream=True` response time at **headers only**; workload adds body-drain duration so `[stream full]` ≈ JSON latency (~2.5–3.5s)
+- Debug first SSE lines: `RAG_SSE_DEBUG=1 locust -f rag_query.py ...`
 
 `wait_time` is `0.5–1s` between tasks.
 

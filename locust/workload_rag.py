@@ -1,3 +1,5 @@
+import time
+
 from locust import HttpUser, between, task
 
 import helpers
@@ -39,12 +41,32 @@ class WorkloadRagUser(HttpUser):
                 return
 
             if stream:
-                events, saw_error, saw_done = helpers.drain_rag_stream(response)
+                drain_start = time.perf_counter()
+                try:
+                    (
+                        lines,
+                        saw_error,
+                        saw_done,
+                        answer_deltas,
+                        saw_answer_end,
+                    ) = helpers.drain_rag_stream(response)
+                except Exception as exc:
+                    helpers.add_response_time_ms(
+                        response, (time.perf_counter() - drain_start) * 1000
+                    )
+                    response.failure(exc)
+                    return
+
+                helpers.add_response_time_ms(
+                    response, (time.perf_counter() - drain_start) * 1000
+                )
                 if saw_error:
                     response.failure("stream error event")
                 elif not saw_done:
                     response.failure("stream missing done event")
-                elif events == 0:
+                elif answer_deltas == 0 and not saw_answer_end:
+                    response.failure("stream missing answer")
+                elif lines == 0:
                     response.failure("stream returned no events")
                 return
 
