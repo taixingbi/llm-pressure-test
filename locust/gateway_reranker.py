@@ -26,23 +26,30 @@ class GatewayRerankerUser(HttpUser):
             catch_response=True,
         ) as response:
             if response.status_code != 200:
-                response.failure(f"status={response.status_code}")
+                response.failure(
+                    f"status={response.status_code}: {response.text[:300]}"
+                )
 
     @task(1)
-    def long_doc(self) -> None:
-        long_doc = helpers.repeat_text("Paris is the capital of France. ", 6000)
+    def medium_doc(self) -> None:
+        doc = helpers.repeat_text(
+            "Paris is the capital of France. ",
+            helpers.RERANK_LONG_DOC_CHARS,
+        )
         body = helpers.rerank_payload(
             model=settings.RERANK_MODEL,
             query="What is Paris?",
-            documents=[long_doc, "Berlin is the capital of Germany."],
+            documents=[doc, "Berlin is the capital of Germany."],
         )
         with self.client.post(
             "/v1/rerank",
             json=body,
             headers=helpers.trace_headers(),
-            name="/v1/rerank [long]",
+            name="/v1/rerank [512]",
             catch_response=True,
-            timeout=120,
+            timeout=60,
         ) as response:
             if response.status_code != 200:
-                response.failure(f"status={response.status_code}")
+                response.failure(
+                    f"status={response.status_code}: {response.text[:300]}"
+                )

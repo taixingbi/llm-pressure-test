@@ -9,6 +9,7 @@ STREAM_MAX_TOKENS = 256
 # Reserve 512-token workloads until max-num-seqs >= 4 and max-model-len is raised.
 HEAVY_MAX_TOKENS = 512
 PROMPT_PROBE_CHARS = (200, 500, 1000, 1500)
+RERANK_LONG_DOC_CHARS = 512
 
 _id_counter = itertools.count(1)
 
