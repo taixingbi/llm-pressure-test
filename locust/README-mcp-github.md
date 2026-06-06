@@ -69,10 +69,6 @@ Ramp after each level is stable:
 ```bash
 locust -f mcp_github.py \
   --host http://192.168.86.179:30191 \
-  --users 2 --spawn-rate 1
-
-locust -f mcp_github.py \
-  --host http://192.168.86.179:30191 \
   --users 4 --spawn-rate 1
 ```
 
