@@ -187,18 +187,31 @@ def rag_payload(
     }
 
 
-def orchestrator_payload(*, question: str, request_id: str, session_id: str) -> dict:
-    return {
-        "question": question,
-        "request_id": request_id,
-        "session_id": session_id,
-    }
+ORCHESTRATOR_RAG_QUESTION = "what is taixing visa status in us?"
+ORCHESTRATOR_MCP_QUESTION = "in huntai, what gateway design?"
+ORCHESTRATOR_CHAT_QUESTION = "how are you?"
+
+
+def orchestrator_answer_payload(
+    *,
+    question: str,
+    conversation_id: str | None = None,
+) -> dict:
+    body: dict[str, str] = {"question": question}
+    if conversation_id:
+        body["conversation_id"] = conversation_id
+    return body
+
+
+def orchestrator_stream_names(route: str) -> tuple[str, str]:
+    return (
+        f"/v1/orchestrator/answer [{route} stream full]",
+        f"/v1/orchestrator/answer [{route} stream ttft]",
+    )
 
 
 CHAT_STREAM_FULL_NAME = "/v1/chat/completions [stream 256 full]"
 CHAT_STREAM_TTFT_NAME = "/v1/chat/completions [stream 256 ttft]"
-ORCH_STREAM_FULL_NAME = "/orchestrator/stream-answer [stream full]"
-ORCH_STREAM_TTFT_NAME = "/orchestrator/stream-answer [stream ttft]"
 RAG_STREAM_FULL_NAME = "/v1/rag/query [stream full]"
 RAG_STREAM_TTFT_NAME = "/v1/rag/query [stream ttft]"
 MCP_STREAM_FULL_NAME = "/v1/mcp [stream full]"
@@ -334,6 +347,52 @@ class RagStreamDrain:
     ttft_drain_ms: float | None = None
     drain_ms: float = 0.0
     error: Exception | None = None
+
+
+def _sse_data_is_done(line: bytes) -> bool:
+    if not line.startswith(b"data: "):
+        return False
+    return b'"type": "done"' in line or b'"type":"done"' in line
+
+
+def drain_orchestrator_stream(
+    response,
+    *,
+    debug: bool = RAG_SSE_DEBUG,
+    debug_max_lines: int = 20,
+) -> RagStreamDrain:
+    """Drain orchestrator SSE until ``data`` with ``type: done`` (or connection error)."""
+    result = RagStreamDrain()
+    debug_lines = 0
+    drain_started = time.perf_counter()
+
+    try:
+        for line in response.iter_lines(decode_unicode=False):
+            if not line:
+                continue
+
+            result.lines += 1
+            if debug and debug_lines < debug_max_lines:
+                print("SSE:", line[:200])
+                debug_lines += 1
+
+            if line.startswith(b"event: error"):
+                result.saw_error = True
+            elif line.startswith(b"event: answer_delta"):
+                result.answer_deltas += 1
+                if result.ttft_drain_ms is None:
+                    result.ttft_drain_ms = (time.perf_counter() - drain_started) * 1000
+            elif line.startswith(b"event: answer_end"):
+                result.saw_answer_end = True
+            elif line.startswith(b"event: done") or _sse_data_is_done(line):
+                result.saw_done = True
+                break
+    except Exception as exc:
+        result.error = exc
+    finally:
+        result.drain_ms = (time.perf_counter() - drain_started) * 1000
+
+    return result
 
 
 def drain_rag_stream(

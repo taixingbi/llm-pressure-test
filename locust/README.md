@@ -21,7 +21,8 @@ Run all commands from the `locust/` directory so `settings` and `helpers` import
 | [README-direct-vllm.md](README-direct-vllm.md) | Direct gpu-node inference, embedding, reranker |
 | [README-rag-query.md](README-rag-query.md) | RAG query (`/v1/rag/query`) |
 | [README-mcp-github.md](README-mcp-github.md) | MCP GitHub search (`/v1/mcp`) |
-| This file | Setup, orchestrator, shared config |
+| [README-orchestrator.md](README-orchestrator.md) | Orchestrator answer (`/v1/orchestrator/answer`) |
+| This file | Setup, shared config |
 
 ## Layout
 
@@ -41,7 +42,8 @@ Run all commands from the `locust/` directory so `settings` and `helpers` import
 | `rag_query.py` | `RagQueryUser` | `/v1/rag/query` |
 | `workload_mcp.py` | `WorkloadMcpUser` (abstract) | shared MCP GitHub workload |
 | `mcp_github.py` | `McpGithubUser` | `/v1/mcp` |
-| `orchestrator.py` | `OrchestratorUser` | `/orchestrator/stream-answer` |
+| `workload_orchestrator.py` | `WorkloadOrchestrator{RAG,MCP,Chat}User` | per-route orchestrator workload |
+| `orchestrator.py` | `Orchestrator{RAG,MCP,Chat}User` | `/v1/orchestrator/answer` |
 
 Shared modules:
 
@@ -57,6 +59,8 @@ Direct nodes: [README-direct-vllm.md](README-direct-vllm.md) → `../smoke-test/
 RAG: [README-rag-query.md](README-rag-query.md) → `../smoke-test/rag-query.md`
 
 MCP GitHub: [README-mcp-github.md](README-mcp-github.md) → `../smoke-test/mcp-github.md`
+
+Orchestrator: [README-orchestrator.md](README-orchestrator.md) → `../smoke-test/orchestrator.md`
 
 ## Run (web UI)
 
@@ -76,13 +80,9 @@ Inference, embedding, reranker on gpu-node-1 / gpu-node-2: [README-direct-vllm.m
 
 [README-mcp-github.md](README-mcp-github.md)
 
-### Orchestrator
+### Orchestrator (`:30184`)
 
-```bash
-locust -f orchestrator.py
-```
-
-Open http://localhost:8089 to adjust users/spawn rate interactively.
+[README-orchestrator.md](README-orchestrator.md)
 
 ## Run (headless)
 
@@ -94,9 +94,7 @@ RAG: [README-rag-query.md](README-rag-query.md).
 
 MCP GitHub: [README-mcp-github.md](README-mcp-github.md).
 
-```bash
-locust -f orchestrator.py --headless -u 10 -r 5 -t 5m
-```
+Orchestrator: [README-orchestrator.md](README-orchestrator.md).
 
 ## Configuration
 
@@ -154,7 +152,7 @@ Direct-node troubleshooting: [README-direct-vllm.md](README-direct-vllm.md#troub
 
 **MCP GitHub** — [README-mcp-github.md](README-mcp-github.md).
 
-**Orchestrator** — streaming `stream-answer`; reports `[stream ttft]` + `[stream full]` per request.
+**Orchestrator** — [README-orchestrator.md](README-orchestrator.md); separate user classes per route (`OrchestratorMCPUser`, etc.).
 
 ## Notes
 
